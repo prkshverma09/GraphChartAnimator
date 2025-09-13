@@ -1,0 +1,5 @@
+{
+  "name": "Bar Chart Animator",
+  "description": "A tool that takes a bar chart image, transforms it into a futuristic style using AI, and then generates an animated video of the bars growing.",
+  "requestFramePermissions": []
+}
