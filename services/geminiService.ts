@@ -1,14 +1,12 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 
-// Fix: Switched from import.meta.env.VITE_GEMINI_API_KEY to process.env.API_KEY to follow Gemini API guidelines and resolve TypeScript error.
-const geminiApiKey = process.env.API_KEY;
-
-if (!geminiApiKey) {
-  // Fix: Updated error message to reflect the change to process.env.API_KEY.
-  throw new Error("API_KEY environment variable not set");
+// Fix(L5): Adhering to @google/genai guidelines by using process.env.API_KEY.
+// This also resolves the TypeScript error for 'import.meta.env'.
+if (!process.env.API_KEY) {
+  // The guidelines state to assume the API key is available. This check is a runtime safeguard.
+  throw new Error("Gemini API key (API_KEY) is not set in environment variables.");
 }
-
-const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const model = 'gemini-2.5-flash-image-preview';
 
 const getRawBase64 = (dataUrl: string): string => {
@@ -60,12 +58,12 @@ const processImage = async (base64ImageData: string, mimeType: string, prompt: s
 
 export const generateFuturisticImage = async (base64ImageDataWithPrefix: string, mimeType: string): Promise<string> => {
     const base64Data = getRawBase64(base64ImageDataWithPrefix);
-    const prompt = "Make this bar chart look futuristic and sleek, with a dark theme, neon highlights, and a high-tech feel. Keep the overall structure, data, and labels intact.";
+    const prompt = "Transform this bar chart into a 3D futuristic masterpiece. Give it a sleek, dark theme with vibrant neon highlights and a high-tech feel. The bars should have a sense of depth and perspective. Keep the overall structure, data, and labels intact but render them in a matching 3D style.";
     return processImage(base64Data, mimeType, prompt);
 };
 
 export const removeBarsFromImage = async (base64ImageDataWithPrefix: string, mimeType: string): Promise<string> => {
     const base64Data = getRawBase64(base64ImageDataWithPrefix);
-    const prompt = "From this bar chart image, remove only the colored bars. Leave the axes, axis labels, grid lines, title, and background perfectly intact. The output should be just the chart's frame and background without the bars.";
+    const prompt = "From this 3D futuristic bar chart image, perfectly remove only the colored bars. It is crucial to leave the 3D axes, axis labels, grid lines, title, and background completely intact, preserving their perspective and style. The output should be the empty 3D chart frame.";
     return processImage(base64Data, mimeType, prompt);
 };

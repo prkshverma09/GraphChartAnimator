@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { Loader } from './Loader';
+import { DownloadIcon } from './Icons';
 
 type StepStatus = 'pending' | 'loading' | 'completed';
 
@@ -10,9 +11,10 @@ interface StepCardProps {
   loadingText?: string;
   content: string | null;
   type: 'image' | 'video';
+  downloadFilename?: string;
 }
 
-export const StepCard: React.FC<StepCardProps> = ({ title, status, loadingText, content, type }) => {
+export const StepCard: React.FC<StepCardProps> = ({ title, status, loadingText, content, type, downloadFilename }) => {
   const renderContent = () => {
     if (status === 'loading') {
       return (
@@ -39,7 +41,20 @@ export const StepCard: React.FC<StepCardProps> = ({ title, status, loadingText, 
 
   return (
     <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 h-80 flex flex-col">
-      <h3 className="text-lg font-semibold text-gray-300 mb-3">{title}</h3>
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-lg font-semibold text-gray-300">{title}</h3>
+        {status === 'completed' && content && downloadFilename && (
+          <a
+            href={content}
+            download={downloadFilename}
+            className="text-gray-400 hover:text-white transition-colors"
+            aria-label={`Download ${title}`}
+            title={`Download ${title}`}
+          >
+            <DownloadIcon className="w-6 h-6" />
+          </a>
+        )}
+      </div>
       <div className="flex-grow bg-gray-900/50 rounded-md flex items-center justify-center p-2 min-h-0">
         {renderContent()}
       </div>

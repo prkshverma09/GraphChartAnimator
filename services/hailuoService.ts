@@ -1,4 +1,3 @@
-
 // Callback to update progress for the UI
 type ProgressCallback = (message: string) => void;
 
@@ -17,21 +16,23 @@ const getRawBase64 = (dataUrl: string): string => {
  * Generates a video by animating between a start and end frame using the Hailuo AI API.
  * @param startFrameDataUrl - The starting image as a data URL.
  * @param endFrameDataUrl - The ending image as a data URL.
- * @param apiKey - The user's Hailuo AI API key.
  * @param onProgress - A callback function to report progress updates to the UI.
  * @returns A promise that resolves to a URL for the generated video.
  */
 export const generateVideo = async (
     startFrameDataUrl: string, 
     endFrameDataUrl: string,
-    apiKey: string,
     onProgress: ProgressCallback
 ): Promise<string> => {
-    console.log("Hailuo AI Service: Starting video generation.");
+    const hailuoApiKey = process.env.HAILUO_API_KEY;
 
-    if (!apiKey) {
-        throw new Error("Hailuo AI API key is not provided.");
+    if (!hailuoApiKey) {
+      const errorMessage = "Hailuo API key (HAILUO_API_KEY) is not set in environment variables.";
+      onProgress(`Error: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
+    
+    console.log("Hailuo AI Service: Starting video generation.");
 
     const startFrameBase64 = getRawBase64(startFrameDataUrl);
     const endFrameBase64 = getRawBase64(endFrameDataUrl);
@@ -43,7 +44,7 @@ export const generateVideo = async (
         const generateResponse = await fetch(GENERATE_URL, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${apiKey}`,
+                'Authorization': `Bearer ${hailuoApiKey}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -80,7 +81,7 @@ export const generateVideo = async (
             const retrieveResponse = await fetch(`${RETRIEVE_URL}?task_id=${taskId}`, {
                 method: 'GET',
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`,
+                    'Authorization': `Bearer ${hailuoApiKey}`,
                 },
             });
             
