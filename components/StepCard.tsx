@@ -7,6 +7,7 @@ type StepStatus = 'pending' | 'loading' | 'completed';
 
 interface StepCardProps {
   title: string;
+  subtitle?: string;
   status: StepStatus;
   loadingText?: string;
   content: string | null;
@@ -14,7 +15,7 @@ interface StepCardProps {
   downloadFilename?: string;
 }
 
-export const StepCard: React.FC<StepCardProps> = ({ title, status, loadingText, content, type, downloadFilename }) => {
+export const StepCard: React.FC<StepCardProps> = ({ title, subtitle, status, loadingText, content, type, downloadFilename }) => {
   const renderContent = () => {
     if (status === 'loading') {
       return (
@@ -42,7 +43,10 @@ export const StepCard: React.FC<StepCardProps> = ({ title, status, loadingText, 
   return (
     <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700 h-80 flex flex-col">
       <div className="flex justify-between items-center mb-3">
-        <h3 className="text-lg font-semibold text-gray-300">{title}</h3>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-300">{title}</h3>
+          {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+        </div>
         {status === 'completed' && content && downloadFilename && (
           <a
             href={content}

@@ -24,10 +24,11 @@ export const generateVideo = async (
     endFrameDataUrl: string,
     onProgress: ProgressCallback
 ): Promise<string> => {
-    const hailuoApiKey = process.env.HAILUO_API_KEY;
+    // Fix: Using process.env to resolve TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
+    const hailuoApiKey = process.env.VITE_HAILUO_API_KEY;
 
     if (!hailuoApiKey) {
-      const errorMessage = "Hailuo API key (HAILUO_API_KEY) is not set in environment variables.";
+      const errorMessage = "Hailuo API key (VITE_HAILUO_API_KEY) is not set in environment variables. Please create a .env file.";
       onProgress(`Error: ${errorMessage}`);
       throw new Error(errorMessage);
     }

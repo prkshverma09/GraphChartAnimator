@@ -2,12 +2,13 @@
 import React, { useState, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { StepCard } from './components/StepCard';
-import { ArrowDownIcon, MagicWandIcon } from './components/Icons';
-import { generateFuturisticImage, removeBarsFromImage } from './services/geminiService';
-import { generateVideo } from './services/hailuoService';
+import { ArrowDownIcon, MagicWandIcon, GoogleIcon } from './components/Icons';
+import { generateFuturisticImage, removeBarsFromImage, generateVideoWithVeo } from './services/geminiService';
+import { generateVideo as generateVideoWithHailuo } from './services/hailuoService';
 import { fileToBase64 } from './utils/fileUtils';
 
 type ProcessStep = 'idle' | 'futuristic' | 'removing_bars' | 'animating' | 'done';
+type AnimationProvider = 'hailuo' | 'google';
 
 const App: React.FC = () => {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
@@ -18,6 +19,7 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<ProcessStep>('idle');
+  const [animationProvider, setAnimationProvider] = useState<AnimationProvider>('hailuo');
   const [animationStatusMessage, setAnimationStatusMessage] = useState<string>("Generating animated video...");
   const [error, setError] = useState<string | null>(null);
 
@@ -66,11 +68,16 @@ const App: React.FC = () => {
       const frameResult = await removeBarsFromImage(futuristicResult, originalFile.type);
       setFrameImage(frameResult);
 
-      // Step 3: Animate using Hailuo AI
+      // Step 3: Animate based on selected provider
       setCurrentStep('animating');
-      const videoUrl = await generateVideo(frameResult, futuristicResult, (message: string) => {
-          setAnimationStatusMessage(message);
-      });
+      let videoUrl: string;
+      const progressCallback = (message: string) => setAnimationStatusMessage(message);
+
+      if (animationProvider === 'hailuo') {
+        videoUrl = await generateVideoWithHailuo(frameResult, futuristicResult, progressCallback);
+      } else {
+        videoUrl = await generateVideoWithVeo(futuristicResult, originalFile.type, progressCallback);
+      }
       setFinalVideoUrl(videoUrl);
 
       setCurrentStep('done');
@@ -81,7 +88,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [originalFile, originalImageDataUrl]);
+  }, [originalFile, originalImageDataUrl, animationProvider]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
@@ -91,7 +98,7 @@ const App: React.FC = () => {
             AI Bar Chart Animator
           </h1>
           <p className="text-gray-400 mt-4 max-w-2xl mx-auto">
-            Upload a bar chart, and our AI will generate a stunning animation using Google Gemini and Hailuo AI.
+            Upload a bar chart, and our AI will generate a stunning animation using powerful models from Google and Hailuo AI.
           </p>
         </header>
 
@@ -99,7 +106,15 @@ const App: React.FC = () => {
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 md:p-8 shadow-2xl shadow-indigo-500/10 border border-gray-700">
             <FileUpload onFileChange={handleFileChange} disabled={isLoading} />
             {originalFile && (
-              <div className="mt-6 flex flex-col items-center gap-4">
+              <div className="mt-6 flex flex-col items-center gap-6">
+                <div className="flex items-center justify-center space-x-4 p-2 bg-gray-900/50 rounded-full border border-gray-700">
+                  <button onClick={() => setAnimationProvider('hailuo')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'hailuo' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                    Hailuo AI
+                  </button>
+                   <button onClick={() => setAnimationProvider('google')} className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'google' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                    <GoogleIcon className="w-4 h-4" /> Google Veo
+                  </button>
+                </div>
                 <button
                   onClick={handleGenerate}
                   disabled={isLoading}
@@ -138,6 +153,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                  <StepCard
                     title="Step 2: Chart Frame (Start Frame)"
+                    subtitle="(Used by Hailuo AI)"
                     status={frameImage ? 'completed' : currentStep === 'removing_bars' ? 'loading' : 'pending'}
                     loadingText="Extracting chart frame..."
                     content={frameImage}
@@ -157,7 +173,7 @@ const App: React.FC = () => {
         </main>
 
          <footer className="text-center mt-16 text-gray-500 text-sm">
-            <p>Powered by Google Gemini & Hailuo AI. Designed by a World-Class Frontend Engineer.</p>
+            <p>Powered by Google Gemini & Veo, and Hailuo AI. Designed by a World-Class Frontend Engineer.</p>
         </footer>
       </div>
     </div>
