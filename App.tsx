@@ -1,14 +1,14 @@
-
 import React, { useState, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { StepCard } from './components/StepCard';
 import { ArrowDownIcon, MagicWandIcon, GoogleIcon } from './components/Icons';
 import { generateFuturisticImage, removeBarsFromImage, generateVideoWithVeo } from './services/geminiService';
 import { generateVideo as generateVideoWithHailuo } from './services/hailuoService';
+import { generateVideo as generateVideoWithSegmind } from './services/segmindService';
 import { fileToBase64 } from './utils/fileUtils';
 
 type ProcessStep = 'idle' | 'futuristic' | 'removing_bars' | 'animating' | 'done';
-type AnimationProvider = 'hailuo' | 'google';
+type AnimationProvider = 'hailuo' | 'google' | 'segmind';
 
 const App: React.FC = () => {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
@@ -20,6 +20,8 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<ProcessStep>('idle');
   const [animationProvider, setAnimationProvider] = useState<AnimationProvider>('hailuo');
+  const [hailuoApiKey, setHailuoApiKey] = useState<string>('');
+  const [segmindApiKey, setSegmindApiKey] = useState<string>('');
   const [animationStatusMessage, setAnimationStatusMessage] = useState<string>("Generating animated video...");
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +54,15 @@ const App: React.FC = () => {
       setError('Please upload an image first.');
       return;
     }
+    
+    if (animationProvider === 'hailuo' && !hailuoApiKey.trim()) {
+        setError('Please enter your Hailuo AI API Key to proceed.');
+        return;
+    }
+    if (animationProvider === 'segmind' && !segmindApiKey.trim()) {
+        setError('Please enter your Segmind API Key to proceed.');
+        return;
+    }
 
     setIsLoading(true);
     resetState();
@@ -74,7 +85,9 @@ const App: React.FC = () => {
       const progressCallback = (message: string) => setAnimationStatusMessage(message);
 
       if (animationProvider === 'hailuo') {
-        videoUrl = await generateVideoWithHailuo(frameResult, futuristicResult, progressCallback);
+        videoUrl = await generateVideoWithHailuo(hailuoApiKey, frameResult, futuristicResult, progressCallback);
+      } else if (animationProvider === 'segmind') {
+        videoUrl = await generateVideoWithSegmind(segmindApiKey, frameResult, futuristicResult, progressCallback);
       } else {
         videoUrl = await generateVideoWithVeo(futuristicResult, originalFile.type, progressCallback);
       }
@@ -88,7 +101,16 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [originalFile, originalImageDataUrl, animationProvider]);
+  }, [originalFile, originalImageDataUrl, animationProvider, hailuoApiKey, segmindApiKey]);
+  
+  const getEndFrameSubtitle = () => {
+    switch(animationProvider) {
+      case 'hailuo': return "(Used as end frame for Hailuo AI)";
+      case 'google': return "(Used as input for Google Veo)";
+      case 'segmind': return "(Used as end frame for Segmind)";
+      default: return "";
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
@@ -98,7 +120,7 @@ const App: React.FC = () => {
             AI Bar Chart Animator
           </h1>
           <p className="text-gray-400 mt-4 max-w-2xl mx-auto">
-            Upload a bar chart, and our AI will generate a stunning animation using powerful models from Google and Hailuo AI.
+            Upload a bar chart, and our AI will generate a stunning animation using powerful models from Google, Hailuo AI, and Segmind.
           </p>
         </header>
 
@@ -107,13 +129,46 @@ const App: React.FC = () => {
             <FileUpload onFileChange={handleFileChange} disabled={isLoading} />
             {originalFile && (
               <div className="mt-6 flex flex-col items-center gap-6">
-                <div className="flex items-center justify-center space-x-4 p-2 bg-gray-900/50 rounded-full border border-gray-700">
-                  <button onClick={() => setAnimationProvider('hailuo')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'hailuo' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
-                    Hailuo AI
-                  </button>
-                   <button onClick={() => setAnimationProvider('google')} className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'google' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
-                    <GoogleIcon className="w-4 h-4" /> Google Veo
-                  </button>
+                <div className="w-full max-w-lg space-y-4">
+                  <div className="flex items-center justify-center space-x-2 p-2 bg-gray-900/50 rounded-full border border-gray-700">
+                    <button onClick={() => setAnimationProvider('hailuo')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'hailuo' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                      Hailuo AI
+                    </button>
+                    <button onClick={() => setAnimationProvider('segmind')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'segmind' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                      Segmind
+                    </button>
+                    <button onClick={() => setAnimationProvider('google')} className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'google' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
+                      <GoogleIcon className="w-4 h-4" /> Google Veo
+                    </button>
+                  </div>
+                  {animationProvider === 'hailuo' && (
+                     <div className="w-full">
+                        <label htmlFor="hailuo-key" className="sr-only">Hailuo AI API Key</label>
+                        <input
+                            id="hailuo-key"
+                            type="password"
+                            value={hailuoApiKey}
+                            onChange={(e) => setHailuoApiKey(e.target.value)}
+                            placeholder="Enter Hailuo AI API Key here"
+                            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-center text-gray-300 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            disabled={isLoading}
+                        />
+                    </div>
+                  )}
+                   {animationProvider === 'segmind' && (
+                     <div className="w-full">
+                        <label htmlFor="segmind-key" className="sr-only">Segmind API Key</label>
+                        <input
+                            id="segmind-key"
+                            type="password"
+                            value={segmindApiKey}
+                            onChange={(e) => setSegmindApiKey(e.target.value)}
+                            placeholder="Enter Segmind API Key here"
+                            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-center text-gray-300 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            disabled={isLoading}
+                        />
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleGenerate}
@@ -138,6 +193,7 @@ const App: React.FC = () => {
                 />
                 <StepCard
                     title="Step 1: Futuristic Chart (End Frame)"
+                    subtitle={getEndFrameSubtitle()}
                     status={futuristicImage ? 'completed' : currentStep === 'futuristic' ? 'loading' : 'pending'}
                     loadingText="Applying futuristic style..."
                     content={futuristicImage}
@@ -153,7 +209,7 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                  <StepCard
                     title="Step 2: Chart Frame (Start Frame)"
-                    subtitle="(Used by Hailuo AI)"
+                    subtitle="(Used by Hailuo & Segmind)"
                     status={frameImage ? 'completed' : currentStep === 'removing_bars' ? 'loading' : 'pending'}
                     loadingText="Extracting chart frame..."
                     content={frameImage}
@@ -173,7 +229,7 @@ const App: React.FC = () => {
         </main>
 
          <footer className="text-center mt-16 text-gray-500 text-sm">
-            <p>Powered by Google Gemini & Veo, and Hailuo AI. Designed by a World-Class Frontend Engineer.</p>
+            <p>Powered by Google Gemini & Veo, Hailuo AI, and Segmind. Designed by a World-Class Frontend Engineer.</p>
         </footer>
       </div>
     </div>

@@ -1,112 +1,68 @@
 // Callback to update progress for the UI
 type ProgressCallback = (message: string) => void;
 
-const GENERATE_URL = "https://api.minimax.chat/v1/video/generate";
-const RETRIEVE_URL = "https://api.minimax.chat/v1/video/retrieve";
-
-const getRawBase64 = (dataUrl: string): string => {
-    const parts = dataUrl.split(',');
-    if (parts.length > 1) {
-        return parts[1];
-    }
-    return dataUrl;
-}
+const GENERATE_URL = "https://api.minimax.io/v1/video_generation";
 
 /**
  * Generates a video by animating between a start and end frame using the Hailuo AI API.
- * @param startFrameDataUrl - The starting image as a data URL.
- * @param endFrameDataUrl - The ending image as a data URL.
+ * This function uses the synchronous MiniMax-Hailuo-02 model.
+ * @param apiKey - The Hailuo AI API key.
+ * @param startFrameDataUrl - The starting image as a full data URL.
+ * @param endFrameDataUrl - The ending image as a full data URL.
  * @param onProgress - A callback function to report progress updates to the UI.
  * @returns A promise that resolves to a URL for the generated video.
  */
 export const generateVideo = async (
-    startFrameDataUrl: string, 
+    apiKey: string,
+    startFrameDataUrl: string,
     endFrameDataUrl: string,
     onProgress: ProgressCallback
 ): Promise<string> => {
-    // Fix: Using process.env to resolve TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
-    const hailuoApiKey = process.env.VITE_HAILUO_API_KEY;
-
-    if (!hailuoApiKey) {
-      const errorMessage = "Hailuo API key (VITE_HAILUO_API_KEY) is not set in environment variables. Please create a .env file.";
-      onProgress(`Error: ${errorMessage}`);
-      throw new Error(errorMessage);
+    if (!apiKey) {
+        const errorMessage = "Hailuo AI API Key was not provided.";
+        onProgress(`Error: ${errorMessage}`);
+        throw new Error(errorMessage);
     }
-    
-    console.log("Hailuo AI Service: Starting video generation.");
 
-    const startFrameBase64 = getRawBase64(startFrameDataUrl);
-    const endFrameBase64 = getRawBase64(endFrameDataUrl);
+    onProgress("Sending request to Hailuo AI...");
 
     try {
-        onProgress("Sending request to Hailuo AI...");
-        
-        // Step 1: Start the video generation task
-        const generateResponse = await fetch(GENERATE_URL, {
+        const payload = {
+            model: "MiniMax-Hailuo-02",
+            prompt: "Animate the bars on this chart growing smoothly from the start frame to the end frame.",
+            first_frame_image: startFrameDataUrl,
+            last_frame_image: endFrameDataUrl,
+            duration: 6, // Fix: Changed from 5 to 6 as per API requirements for 1080P
+            resolution: "1080P"
+        };
+
+        const response = await fetch(GENERATE_URL, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${hailuoApiKey}`,
+                'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                start_frame: startFrameBase64,
-                end_frame: endFrameBase64,
-                // Additional parameters can be added here based on documentation
-            }),
+            body: JSON.stringify(payload),
         });
 
-        if (!generateResponse.ok) {
-            const errorBody = await generateResponse.json();
-            throw new Error(`Hailuo API Error: ${errorBody.base?.message || generateResponse.statusText}`);
+        const result = await response.json();
+
+        // Check for API-level errors indicated in the response body
+        if (result.base_resp && result.base_resp.status_code !== 0) {
+            throw new Error(`Hailuo API Error: ${result.base_resp.status_msg}`);
         }
 
-        const generateResult = await generateResponse.json();
-        const taskId = generateResult.task_id;
-
-        if (!taskId) {
-            throw new Error("Failed to get a task ID from Hailuo AI.");
+        // Check for network/HTTP errors
+        if (!response.ok) {
+            throw new Error(`Request failed with status ${response.status}. Message: ${result.base_resp?.status_msg || response.statusText}`);
         }
 
-        onProgress("Task created. Polling for video result...");
-
-        // Step 2: Poll for the result
-        let pollingAttempts = 0;
-        const maxAttempts = 60; // Poll for up to 5 minutes (60 attempts * 5 seconds)
-
-        while (pollingAttempts < maxAttempts) {
-            pollingAttempts++;
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-
-            onProgress(`Checking video status... (Attempt ${pollingAttempts})`);
-
-            const retrieveResponse = await fetch(`${RETRIEVE_URL}?task_id=${taskId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${hailuoApiKey}`,
-                },
-            });
-            
-            if (!retrieveResponse.ok) {
-                // Continue polling even if one check fails, but log it
-                console.warn(`Polling failed on attempt ${pollingAttempts}: ${retrieveResponse.statusText}`);
-                continue;
-            }
-
-            const retrieveResult = await retrieveResponse.json();
-
-            if (retrieveResult.status === "completed") {
-                onProgress("Video generation complete!");
-                if (!retrieveResult.video_url) {
-                    throw new Error("Video generation completed, but no video URL was returned.");
-                }
-                return retrieveResult.video_url;
-            } else if (retrieveResult.status === "failed") {
-                throw new Error(`Video generation failed: ${retrieveResult.error?.message || 'Unknown reason'}`);
-            }
-            // If status is "processing", the loop will continue
+        if (!result.video_url) {
+            throw new Error("Video generation may have succeeded, but no video URL was returned.");
         }
 
-        throw new Error("Video generation timed out. The task took too long to complete.");
+        onProgress("Video generation complete!");
+        return result.video_url;
 
     } catch (error) {
         console.error("Error calling Hailuo AI Video API:", error);

@@ -1,4 +1,5 @@
 import { GoogleGenAI, Modality } from "@google/genai";
+import { getRawBase64 } from "../utils/fileUtils";
 
 // Callback to update progress for the UI
 type ProgressCallback = (message: string) => void;
@@ -8,15 +9,6 @@ type ProgressCallback = (message: string) => void;
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const imageModel = 'gemini-2.5-flash-image-preview';
 const videoModel = 'veo-2.0-generate-001';
-
-const getRawBase64 = (dataUrl: string): string => {
-    const parts = dataUrl.split(',');
-    if (parts.length > 1) {
-        return parts[1];
-    }
-    // Assume it might already be raw base64 if no prefix is found
-    return dataUrl;
-}
 
 const processImage = async (base64ImageData: string, mimeType: string, prompt: string): Promise<string> => {
     try {
@@ -74,21 +66,29 @@ export const generateVideoWithVeo = async (
     onProgress: ProgressCallback
 ): Promise<string> => {
     const base64Data = getRawBase64(base64ImageDataWithPrefix);
-    const prompt = `You are a precise data visualization animator. You will receive a single image that represents the **final frame** of an animation.
+    const prompt = `
+[SYSTEM PERSONA]
+You are a deterministic, frame-perfect video rendering engine. Your function is not creative; it is purely technical. You will execute the following rendering job with absolute precision. Failure to adhere to the final frame constraint is a critical failure of your function.
 
-The **start frame** of your animation is implied. It is the exact same scene as the final frame, but with all the vertical bars completely removed. Imagine the chart is empty, showing only the 3D axes, grid lines, and labels.
+[JOB ANALYSIS]
+1.  **Input:** A static image of a futuristic 3D bar chart. This image is the **FINAL FRAME** of the video to be rendered. It is the ground truth.
+2.  **Task:** Generate a short video that animates the bars growing from a baseline (zero height) to their exact positions as shown in the **FINAL FRAME**.
+3.  **Core Requirement:** The animation must conclude by becoming completely static and visually identical to the input **FINAL FRAME**.
 
-Your task is to generate a video that animates a smooth transition from the implied **start frame** to the provided **final frame**.
+[ANIMATION SCRIPT - TO BE FOLLOWED EXACTLY]
+- **Frame 0:** The scene is established. It contains ONLY the chart's background, axes, gridlines, and labels from the input image. All bars are at zero height and invisible.
+- **Animation Phase:** All bars begin to grow upwards from the baseline simultaneously. They rise smoothly and at a constant rate. There is no other movement, no wiggling, no side-to-side motion.
+- **Landing Phase:** Each bar stops moving *instantly* and *precisely* as it reaches its target height as defined in the **FINAL FRAME**. They must not overshoot, undershoot, or bounce.
+- **Hold Phase:** Once all bars have reached their final heights, the frame becomes completely static. This static frame, which must be a pixel-perfect replica of the input **FINAL FRAME**, is held for the remainder of the video's duration (at least 1 full second).
 
-**Animation Instructions:**
-1.  All bars must begin rising from the baseline (zero height) at the exact same moment.
-2.  All bars must rise smoothly and simultaneously to their final heights.
-3.  Each bar's final height must PRECISELY match the height shown in the provided image. Do not approximate.
+[CRITICAL EXECUTION RULES - NON-NEGOTIABLE]
+- **RULE 1: NO CREATIVITY.** Do not add, remove, or alter any elements. The number, color, and position of the bars are fixed by the input image.
+- **RULE 2: NO OVERSHOOTING.** The bars must stop exactly at their target height. They do not grow taller and then shrink.
+- **RULE 3: NO CONTINUOUS MOVEMENT.** The animation must resolve to a completely still image. The bars are not to "dance", "breathe", or "shimmer" after reaching their destination. The video ends with a static shot.
+- **RULE 4: FINAL FRAME IS LAW.** The very last frame of the output video must be indistinguishable from the input image provided. This is the primary success metric.
 
-**Strict Rules:**
--   DO NOT add any bars that are not present in the provided image.
--   DO NOT omit any bars that are present in the provided image. The number of bars must be identical.
--   The final rendered frame of the video must be a pixel-perfect match to the input image. You must adhere strictly to the data visualization provided.`;
+[FINAL COMMAND]
+Execute the rendering job as specified. Prioritize precision and final-frame accuracy above all else.`;
 
     try {
         onProgress("Sending request to Google Veo...");
