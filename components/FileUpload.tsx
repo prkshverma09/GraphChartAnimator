@@ -58,9 +58,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, disabled }
 
   return (
     <div
-      className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-300 ${
-        isDragging ? 'border-indigo-500 bg-indigo-500/10' : 'border-gray-600 hover:border-gray-500'
-      } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+      className={`relative w-full p-8 border-2 border-dashed border-gray-600 rounded-2xl flex items-center justify-center transition-colors duration-300 ${
+        isDragging ? 'bg-indigo-500/10 border-indigo-500' : ''
+      } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-gray-500'}`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -74,7 +74,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileChange, disabled }
         accept="image/*"
         disabled={disabled}
       />
-      <div className="flex flex-col items-center justify-center">
+      <div className="flex flex-col items-center justify-center text-center p-4">
         <UploadIcon className="w-12 h-12 text-gray-500 mb-4" />
         <p className="font-semibold text-gray-300">
             {fileName ? `Selected: ${fileName}` : 'Drag & drop an image here, or click to select'}

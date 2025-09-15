@@ -1,18 +1,29 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { getRawBase64 } from "../utils/fileUtils";
 
 // Callback to update progress for the UI
 type ProgressCallback = (message: string) => void;
 
-// Fix: Per coding guidelines, API key is sourced directly from process.env.API_KEY.
-// This also resolves the TypeScript error "Property 'env' does not exist on type 'ImportMeta'".
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Fix: Lazily initialize the GoogleGenAI client to prevent "process is not defined" error
+// on module load in browser environments. The client will only be created when a function
+// that needs it is actually called.
+let ai: GoogleGenAI | null = null;
+const getAiClient = (): GoogleGenAI => {
+    if (!ai) {
+        // This line will only run when a service function is called, not on initial load.
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+    return ai;
+};
+
 const imageModel = 'gemini-2.5-flash-image-preview';
 const videoModel = 'veo-2.0-generate-001';
 
 const processImage = async (base64ImageData: string, mimeType: string, prompt: string): Promise<string> => {
     try {
-        const response = await ai.models.generateContent({
+        const client = getAiClient();
+        const response = await client.models.generateContent({
             model: imageModel,
             contents: {
                 parts: [
@@ -91,8 +102,9 @@ You are a deterministic, frame-perfect video rendering engine. Your function is 
 Execute the rendering job as specified. Prioritize precision and final-frame accuracy above all else.`;
 
     try {
+        const client = getAiClient();
         onProgress("Sending request to Google Veo...");
-        let operation = await ai.models.generateVideos({
+        let operation = await client.models.generateVideos({
             model: videoModel,
             prompt: prompt,
             image: {
@@ -112,7 +124,7 @@ Execute the rendering job as specified. Prioritize precision and final-frame acc
             pollingAttempts++;
             onProgress(`Checking video status... (This can take several minutes)`);
             await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-            operation = await ai.operations.getVideosOperation({ operation: operation });
+            operation = await client.operations.getVideosOperation({ operation: operation });
         }
 
         if (!operation.done) {

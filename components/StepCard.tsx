@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React, { useRef } from 'react';
 import { Loader } from './Loader';
 import { DownloadIcon } from './Icons';
 
@@ -16,6 +15,17 @@ interface StepCardProps {
 }
 
 export const StepCard: React.FC<StepCardProps> = ({ title, subtitle, status, loadingText, content, type, downloadFilename }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handleVideoEnded = () => {
+    // Wait for 2.5 seconds before replaying
+    setTimeout(() => {
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    }, 2500);
+  };
+
   const renderContent = () => {
     if (status === 'loading') {
       return (
@@ -30,9 +40,20 @@ export const StepCard: React.FC<StepCardProps> = ({ title, subtitle, status, loa
         return <img src={content} alt={title} className="w-full h-full object-contain rounded-md" />;
       }
       if (type === 'video') {
-        return <video src={content} controls autoPlay loop className="w-full h-full object-contain rounded-md" />;
+        return (
+          <video
+            ref={videoRef}
+            src={content}
+            controls
+            autoPlay
+            muted
+            onEnded={handleVideoEnded}
+            className="w-full h-full object-contain rounded-md"
+          />
+        );
       }
     }
+
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-gray-600">Waiting for previous step...</p>

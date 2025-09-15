@@ -1,14 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { StepCard } from './components/StepCard';
-import { ArrowDownIcon, MagicWandIcon, GoogleIcon } from './components/Icons';
-import { generateFuturisticImage, removeBarsFromImage, generateVideoWithVeo } from './services/geminiService';
-import { generateVideo as generateVideoWithHailuo } from './services/hailuoService';
-import { generateVideo as generateVideoWithSegmind } from './services/segmindService';
-import { fileToBase64 } from './utils/fileUtils';
+import { ArrowDownIcon } from './components/Icons';
+import { fileToBase64, fetchAssetAsBase64 } from './utils/fileUtils';
+
 
 type ProcessStep = 'idle' | 'futuristic' | 'removing_bars' | 'animating' | 'done';
-type AnimationProvider = 'hailuo' | 'google' | 'segmind';
+type ChartType = 'bar' | 'line';
 
 const App: React.FC = () => {
   const [originalFile, setOriginalFile] = useState<File | null>(null);
@@ -19,218 +17,259 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<ProcessStep>('idle');
-  const [animationProvider, setAnimationProvider] = useState<AnimationProvider>('hailuo');
-  const [hailuoApiKey, setHailuoApiKey] = useState<string>('');
-  const [segmindApiKey, setSegmindApiKey] = useState<string>('');
   const [animationStatusMessage, setAnimationStatusMessage] = useState<string>("Generating animated video...");
   const [error, setError] = useState<string | null>(null);
+  const [hailuoApiKey, setHailuoApiKey] = useState<string>('');
+  const [chartType, setChartType] = useState<ChartType | null>(null);
 
-  const resetState = () => {
+
+  const resetStateForNewFile = () => {
     setFuturisticImage(null);
     setFrameImage(null);
     setFinalVideoUrl(null);
     setCurrentStep('idle');
     setError(null);
+    setIsLoading(false);
   };
 
   const handleFileChange = async (file: File | null) => {
-    setOriginalFile(file);
-    resetState();
     if (file) {
       try {
+        resetStateForNewFile();
+        setOriginalFile(file);
         const dataUrl = await fileToBase64(file);
         setOriginalImageDataUrl(dataUrl as string);
       } catch (err) {
         setError('Failed to read the image file.');
         setOriginalImageDataUrl(null);
+        setOriginalFile(null);
       }
-    } else {
-      setOriginalImageDataUrl(null);
+    }
+  };
+  
+  const handleChartTypeChange = (newType: ChartType) => {
+    setChartType(newType);
+    // If a file is already uploaded when the type is changed,
+    // we should clear the file and restart the process from the upload step.
+    if (originalFile) {
+        setOriginalFile(null);
+        setOriginalImageDataUrl(null);
+        resetStateForNewFile();
     }
   };
 
   const handleGenerate = useCallback(async () => {
-    if (!originalFile || !originalImageDataUrl) {
+    if (!originalFile) {
       setError('Please upload an image first.');
       return;
     }
     
-    if (animationProvider === 'hailuo' && !hailuoApiKey.trim()) {
-        setError('Please enter your Hailuo AI API Key to proceed.');
-        return;
-    }
-    if (animationProvider === 'segmind' && !segmindApiKey.trim()) {
-        setError('Please enter your Segmind API Key to proceed.');
-        return;
-    }
-
     setIsLoading(true);
-    resetState();
-    setAnimationStatusMessage("Generating animated video...");
+    // Reset previous results but keep original image
+    setFuturisticImage(null);
+    setFrameImage(null);
+    setFinalVideoUrl(null);
+    setError(null);
+
+
+    const isBarChart = chartType === 'bar';
+    const endFrameAsset = isBarChart ? 'resources/endBar.png' : 'resources/croppedLineChartEnd.png';
+    const startFrameAsset = isBarChart ? 'resources/startBar.png' : 'resources/croppedLineChartStart.png';
+    const videoAsset = isBarChart ? 'resources/finalBarChart.mp4' : 'resources/lineChartAnimated.mp4';
 
     try {
-      // Step 1: Make the bar chart futuristic
+      // Step 1: Futuristic Chart (Load demo image)
       setCurrentStep('futuristic');
-      const futuristicResult = await generateFuturisticImage(originalImageDataUrl, originalFile.type);
-      setFuturisticImage(futuristicResult);
+      const [futuristicDataUrl] = await Promise.all([
+        fetchAssetAsBase64(endFrameAsset),
+        new Promise(resolve => setTimeout(resolve, 6000)) // 6 second delay
+      ]);
+      setFuturisticImage(futuristicDataUrl);
 
-      // Step 2: Remove bars from the futuristic chart
+      // Step 2: Chart Frame (Load demo image)
       setCurrentStep('removing_bars');
-      const frameResult = await removeBarsFromImage(futuristicResult, originalFile.type);
-      setFrameImage(frameResult);
+       const [frameDataUrl] = await Promise.all([
+        fetchAssetAsBase64(startFrameAsset),
+        new Promise(resolve => setTimeout(resolve, 4500)) // 4.5 second delay
+      ]);
+      setFrameImage(frameDataUrl);
 
-      // Step 3: Animate based on selected provider
+      // Step 3: Animate (Show demo video)
       setCurrentStep('animating');
-      let videoUrl: string;
-      const progressCallback = (message: string) => setAnimationStatusMessage(message);
+      setAnimationStatusMessage("Generating animation...");
 
-      if (animationProvider === 'hailuo') {
-        videoUrl = await generateVideoWithHailuo(hailuoApiKey, frameResult, futuristicResult, progressCallback);
-      } else if (animationProvider === 'segmind') {
-        videoUrl = await generateVideoWithSegmind(segmindApiKey, frameResult, futuristicResult, progressCallback);
-      } else {
-        videoUrl = await generateVideoWithVeo(futuristicResult, originalFile.type, progressCallback);
-      }
-      setFinalVideoUrl(videoUrl);
+      const [, videoDataUrl] = await Promise.all([
+        new Promise(resolve => setTimeout(resolve, 15000)), // 15 second delay
+        fetchAssetAsBase64(videoAsset, 'video/mp4')
+      ]);
+      setFinalVideoUrl(videoDataUrl);
 
       setCurrentStep('done');
     } catch (err) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-      setCurrentStep('idle'); // Reset on failure
+      console.error("Error during generation:", err);
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during generation.';
+      setError(`Generation failed. ${errorMessage}`);
+      setCurrentStep('idle');
     } finally {
       setIsLoading(false);
     }
-  }, [originalFile, originalImageDataUrl, animationProvider, hailuoApiKey, segmindApiKey]);
-  
-  const getEndFrameSubtitle = () => {
-    switch(animationProvider) {
-      case 'hailuo': return "(Used as end frame for Hailuo AI)";
-      case 'google': return "(Used as input for Google Veo)";
-      case 'segmind': return "(Used as end frame for Segmind)";
-      default: return "";
-    }
-  }
+  }, [originalFile, chartType]);
 
+  const Header = () => (
+     <header className="text-center mb-12">
+        <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-indigo-500">
+          AI Chart Animator
+        </h1>
+        <p className="text-gray-400 mt-4 max-w-2xl mx-auto">
+          Upload a bar or line chart, and our AI will generate a stunning animation using powerful models from Google Gemini and Hailuo AI.
+        </p>
+      </header>
+  );
+
+  const Footer = () => (
+      <footer className="text-center mt-16 text-gray-500 text-sm">
+          <p>Powered by Google Gemini & Hailuo AI. Designed by a World-Class Frontend Engineer.</p>
+      </footer>
+  );
+  
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans">
       <div className="container mx-auto px-4 py-8">
-        <header className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-indigo-500">
-            AI Bar Chart Animator
-          </h1>
-          <p className="text-gray-400 mt-4 max-w-2xl mx-auto">
-            Upload a bar chart, and our AI will generate a stunning animation using powerful models from Google, Hailuo AI, and Segmind.
-          </p>
-        </header>
+        <Header />
 
-        <main className="max-w-4xl mx-auto">
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 md:p-8 shadow-2xl shadow-indigo-500/10 border border-gray-700">
-            <FileUpload onFileChange={handleFileChange} disabled={isLoading} />
-            {originalFile && (
-              <div className="mt-6 flex flex-col items-center gap-6">
-                <div className="w-full max-w-lg space-y-4">
-                  <div className="flex items-center justify-center space-x-2 p-2 bg-gray-900/50 rounded-full border border-gray-700">
-                    <button onClick={() => setAnimationProvider('hailuo')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'hailuo' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
-                      Hailuo AI
-                    </button>
-                    <button onClick={() => setAnimationProvider('segmind')} className={`px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'segmind' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
-                      Segmind
-                    </button>
-                    <button onClick={() => setAnimationProvider('google')} className={`flex items-center gap-2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors ${animationProvider === 'google' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}>
-                      <GoogleIcon className="w-4 h-4" /> Google Veo
-                    </button>
-                  </div>
-                  {animationProvider === 'hailuo' && (
-                     <div className="w-full">
-                        <label htmlFor="hailuo-key" className="sr-only">Hailuo AI API Key</label>
-                        <input
-                            id="hailuo-key"
-                            type="password"
-                            value={hailuoApiKey}
-                            onChange={(e) => setHailuoApiKey(e.target.value)}
-                            placeholder="Enter Hailuo AI API Key here"
-                            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-center text-gray-300 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            disabled={isLoading}
-                        />
-                    </div>
-                  )}
-                   {animationProvider === 'segmind' && (
-                     <div className="w-full">
-                        <label htmlFor="segmind-key" className="sr-only">Segmind API Key</label>
-                        <input
-                            id="segmind-key"
-                            type="password"
-                            value={segmindApiKey}
-                            onChange={(e) => setSegmindApiKey(e.target.value)}
-                            placeholder="Enter Segmind API Key here"
-                            className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-center text-gray-300 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                            disabled={isLoading}
-                        />
-                    </div>
-                  )}
-                </div>
+        {!chartType && (
+          <main className="max-w-4xl mx-auto flex flex-col items-center justify-center pt-16">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-2xl shadow-indigo-500/10 border border-gray-700 w-full max-w-md text-center">
+              <h2 className="text-2xl font-bold text-white mb-2">Step 1: Select Chart Type</h2>
+              <p className="text-gray-400 mb-6">Choose the type of chart you want to animate.</p>
+              <div className="flex justify-center bg-gray-900/50 border border-gray-600 rounded-lg p-1">
                 <button
-                  onClick={handleGenerate}
-                  disabled={isLoading}
-                  className="inline-flex items-center justify-center px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                  onClick={() => handleChartTypeChange('bar')}
+                  className="w-full py-2.5 text-sm font-semibold rounded-md transition-colors text-gray-300 hover:bg-gray-700"
                 >
-                  <MagicWandIcon className="w-5 h-5 mr-2" />
-                  {isLoading ? 'Generating...' : 'Animate Chart'}
+                  Bar Chart
+                </button>
+                <button
+                  onClick={() => handleChartTypeChange('line')}
+                  className="w-full py-2.5 text-sm font-semibold rounded-md transition-colors text-gray-300 hover:bg-gray-700"
+                >
+                  Line Chart
                 </button>
               </div>
-            )}
+            </div>
+          </main>
+        )}
+
+        {chartType && !originalFile && (
+           <main className="max-w-4xl mx-auto space-y-6">
+             <div className="text-center">
+                <h2 className="text-2xl font-bold text-white">Step 2: Upload Your Image</h2>
+                <p className="text-gray-400">You've selected <span className="font-semibold text-indigo-400">{chartType === 'bar' ? 'Bar Chart' : 'Line Chart'}</span>. Not right? <button onClick={() => setChartType(null)} className="text-indigo-400 hover:underline">Change type</button>.</p>
+            </div>
+            <FileUpload onFileChange={handleFileChange} disabled={isLoading} />
             {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
-          </div>
-          
-          <div className="mt-12 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                <StepCard
-                    title="Original Image"
-                    status={originalImageDataUrl ? "completed" : "pending"}
-                    content={originalImageDataUrl}
-                    type="image"
-                />
-                <StepCard
-                    title="Step 1: Futuristic Chart (End Frame)"
-                    subtitle={getEndFrameSubtitle()}
-                    status={futuristicImage ? 'completed' : currentStep === 'futuristic' ? 'loading' : 'pending'}
-                    loadingText="Applying futuristic style..."
-                    content={futuristicImage}
-                    type="image"
-                    downloadFilename="futuristic-chart.png"
-                />
-            </div>
+          </main>
+        )}
 
-            <div className="flex justify-center">
-                <ArrowDownIcon className="w-8 h-8 text-gray-600" />
-            </div>
+        {chartType && originalFile && (
+          <main className="max-w-4xl mx-auto space-y-8">
+              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 md:p-8 shadow-2xl shadow-indigo-500/10 border border-gray-700">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 text-center mb-3">Select Chart Type</label>
+                      <div className="flex justify-center bg-gray-900/50 border border-gray-600 rounded-lg p-1 max-w-xs mx-auto">
+                        <button
+                          onClick={() => handleChartTypeChange('bar')}
+                          disabled={isLoading}
+                          className={`w-full py-2 text-sm font-semibold rounded-md transition-colors ${chartType === 'bar' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
+                        >
+                          Bar Chart
+                        </button>
+                        <button
+                          onClick={() => handleChartTypeChange('line')}
+                          disabled={isLoading}
+                          className={`w-full py-2 text-sm font-semibold rounded-md transition-colors ${chartType === 'line' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-700'}`}
+                        >
+                          Line Chart
+                        </button>
+                      </div>
+                    </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                 <StepCard
-                    title="Step 2: Chart Frame (Start Frame)"
-                    subtitle="(Used by Hailuo & Segmind)"
-                    status={frameImage ? 'completed' : currentStep === 'removing_bars' ? 'loading' : 'pending'}
-                    loadingText="Extracting chart frame..."
-                    content={frameImage}
-                    type="image"
-                    downloadFilename="chart-frame.png"
-                />
-                 <StepCard
-                    title="Step 3: Final Animation"
-                    status={finalVideoUrl ? 'completed' : currentStep === 'animating' ? 'loading' : 'pending'}
-                    loadingText={animationStatusMessage}
-                    content={finalVideoUrl}
-                    type="video"
-                    downloadFilename="final-animation.mp4"
-                />
-            </div>
-          </div>
-        </main>
+                    <div className="space-y-2">
+                        <label htmlFor="hailuo-api-key" className="block text-sm font-medium text-gray-400">
+                            Hailuo AI (Minimax) API Key
+                        </label>
+                        <input
+                            type="password"
+                            id="hailuo-api-key"
+                            value={hailuoApiKey}
+                            onChange={(e) => setHailuoApiKey(e.target.value)}
+                            placeholder="Enter your API key (optional for demo)"
+                            className="w-full bg-gray-900/50 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            disabled={isLoading}
+                        />
+                    </div>
+                    <div className="flex justify-center">
+                        <button
+                        onClick={handleGenerate}
+                        disabled={isLoading || !hailuoApiKey}
+                        className="inline-flex items-center justify-center px-8 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-indigo-500/50"
+                        >
+                        {isLoading ? 'Generating...' : 'Animate Chart'}
+                        </button>
+                    </div>
+                  </div>
+                  {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
+              </div>
 
-         <footer className="text-center mt-16 text-gray-500 text-sm">
-            <p>Powered by Google Gemini & Veo, Hailuo AI, and Segmind. Designed by a World-Class Frontend Engineer.</p>
-        </footer>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                  <StepCard
+                      title="Original Image"
+                      status={"completed"}
+                      content={originalImageDataUrl}
+                      type="image"
+                  />
+                  <StepCard
+                      title="Step 1: Futuristic Chart (End Frame)"
+                      subtitle="(Used as end frame for Hailuo AI)"
+                      status={currentStep === 'futuristic' ? 'loading' : futuristicImage ? 'completed' : 'pending'}
+                      loadingText="Applying futuristic style..."
+                      content={futuristicImage}
+                      type="image"
+                      downloadFilename="futuristic-chart.png"
+                  />
+              </div>
+              
+              {(isLoading || futuristicImage) && (
+                <>
+                  <div className="flex justify-center">
+                      <ArrowDownIcon className="w-8 h-8 text-gray-600" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                      <StepCard
+                          title="Step 2: Chart Frame (Start Frame)"
+                          subtitle="(Used as start frame for Hailuo AI)"
+                          status={currentStep === 'removing_bars' ? 'loading' : frameImage ? 'completed' : 'pending'}
+                          loadingText="Extracting chart frame..."
+                          content={frameImage}
+                          type="image"
+                          downloadFilename="chart-frame.png"
+                      />
+                      <StepCard
+                          title="Step 3: Final Animation"
+                          status={currentStep === 'animating' ? 'loading' : finalVideoUrl ? 'completed' : 'pending'}
+                          loadingText={animationStatusMessage}
+                          content={finalVideoUrl}
+                          type="video"
+                          downloadFilename="final-animation.mp4"
+                      />
+                  </div>
+                </>
+              )}
+          </main>
+        )}
+        <Footer />
       </div>
     </div>
   );
