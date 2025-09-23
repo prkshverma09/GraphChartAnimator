@@ -84,7 +84,7 @@ export const generateVideo = async (
             onProgress(`Checking task status... (Attempt ${pollingAttempts}/${maxAttempts})`);
 
             const queryResponse = await fetch(`${QUERY_TASK_URL}?task_id=${taskId}`, {
-                method: 'POST', // Corrected: Use POST for querying task status as per documentation
+                method: 'GET', // Corrected: Use GET for querying task status as per successful curl test.
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                 },
