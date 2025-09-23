@@ -71,6 +71,19 @@ export const removeBarsFromImage = async (base64ImageDataWithPrefix: string, mim
     return processImage(base64Data, mimeType, prompt);
 };
 
+export const generateFuturisticLineChart = async (base64ImageDataWithPrefix: string, mimeType: string): Promise<string> => {
+    const base64Data = getRawBase64(base64ImageDataWithPrefix);
+    const prompt = "Convert this given line chart to a futuristic line chart. But, the data indicated in the chart should be exactly same as original image. The lines in the generated chart should be exactly same as in original image.";
+    return processImage(base64Data, mimeType, prompt);
+};
+
+export const removeLinesFromLineChart = async (base64ImageDataWithPrefix: string, mimeType: string): Promise<string> => {
+    const base64Data = getRawBase64(base64ImageDataWithPrefix);
+    const prompt = "Now, remove the lines from the above futuristic chart. The lines from the line graphs in the attached futuristic image should be completely removed, essentially making this line chart empty. nothing else should change.";
+    return processImage(base64Data, mimeType, prompt);
+};
+
+
 export const generateVideoWithVeo = async (
     base64ImageDataWithPrefix: string,
     mimeType: string,

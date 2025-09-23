@@ -2,7 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { StepCard } from './components/StepCard';
 import { ArrowDownIcon } from './components/Icons';
-import { fileToBase64, fetchAssetAsBase64 } from './utils/fileUtils';
+import { fileToBase64 } from './utils/fileUtils';
+import { generateFuturisticImage, removeBarsFromImage, generateFuturisticLineChart, removeLinesFromLineChart } from './services/geminiService';
+import { generateVideo as generateHailuoVideo } from './services/hailuoService';
 
 
 type ProcessStep = 'idle' | 'futuristic' | 'removing_bars' | 'animating' | 'done';
@@ -59,8 +61,12 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = useCallback(async () => {
-    if (!originalFile) {
+    if (!originalFile || !originalImageDataUrl) {
       setError('Please upload an image first.');
+      return;
+    }
+     if (!hailuoApiKey) {
+      setError('Please enter your Hailuo AI API Key.');
       return;
     }
     
@@ -71,38 +77,36 @@ const App: React.FC = () => {
     setFinalVideoUrl(null);
     setError(null);
 
-
-    const isBarChart = chartType === 'bar';
-    const endFrameAsset = isBarChart ? 'resources/endBar.png' : 'resources/croppedLineChartEnd.png';
-    const startFrameAsset = isBarChart ? 'resources/startBar.png' : 'resources/croppedLineChartStart.png';
-    const videoAsset = isBarChart ? 'resources/finalBarChart.mp4' : 'resources/lineChartAnimated.mp4';
-
     try {
-      // Step 1: Futuristic Chart (Load demo image)
+      const isBarChart = chartType === 'bar';
+      const animationPrompt = isBarChart 
+        ? "Animate the bars on this chart growing smoothly from the start frame to the end frame."
+        : "Animate this line chart, the lines should trace from left to right to reach the end frame.";
+
+      // Step 1: Generate Futuristic Chart
       setCurrentStep('futuristic');
-      const [futuristicDataUrl] = await Promise.all([
-        fetchAssetAsBase64(endFrameAsset),
-        new Promise(resolve => setTimeout(resolve, 6000)) // 6 second delay
-      ]);
-      setFuturisticImage(futuristicDataUrl);
+      const futuristicResult = isBarChart 
+        ? await generateFuturisticImage(originalImageDataUrl, originalFile.type)
+        : await generateFuturisticLineChart(originalImageDataUrl, originalFile.type);
+      setFuturisticImage(futuristicResult);
 
-      // Step 2: Chart Frame (Load demo image)
+      // Step 2: Generate Empty Frame from Futuristic Chart
       setCurrentStep('removing_bars');
-       const [frameDataUrl] = await Promise.all([
-        fetchAssetAsBase64(startFrameAsset),
-        new Promise(resolve => setTimeout(resolve, 4500)) // 4.5 second delay
-      ]);
-      setFrameImage(frameDataUrl);
+      const frameResult = isBarChart
+        ? await removeBarsFromImage(futuristicResult, originalFile.type)
+        : await removeLinesFromLineChart(futuristicResult, originalFile.type);
+      setFrameImage(frameResult);
 
-      // Step 3: Animate (Show demo video)
+      // Step 3: Animate with Hailuo AI
       setCurrentStep('animating');
-      setAnimationStatusMessage("Generating animation...");
-
-      const [, videoDataUrl] = await Promise.all([
-        new Promise(resolve => setTimeout(resolve, 15000)), // 15 second delay
-        fetchAssetAsBase64(videoAsset, 'video/mp4')
-      ]);
-      setFinalVideoUrl(videoDataUrl);
+      const videoResult = await generateHailuoVideo(
+        hailuoApiKey,
+        frameResult, // Start Frame
+        futuristicResult, // End Frame
+        setAnimationStatusMessage,
+        animationPrompt
+      );
+      setFinalVideoUrl(videoResult);
 
       setCurrentStep('done');
     } catch (err) {
@@ -113,7 +117,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [originalFile, chartType]);
+  }, [originalFile, originalImageDataUrl, chartType, hailuoApiKey]);
 
   const Header = () => (
      <header className="text-center mb-12">
@@ -204,7 +208,7 @@ const App: React.FC = () => {
                             id="hailuo-api-key"
                             value={hailuoApiKey}
                             onChange={(e) => setHailuoApiKey(e.target.value)}
-                            placeholder="Enter your API key (optional for demo)"
+                            placeholder="Enter your API key"
                             className="w-full bg-gray-900/50 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             disabled={isLoading}
                         />

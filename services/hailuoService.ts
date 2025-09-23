@@ -10,13 +10,15 @@ const GENERATE_URL = "https://api.minimax.io/v1/video_generation";
  * @param startFrameDataUrl - The starting image as a full data URL.
  * @param endFrameDataUrl - The ending image as a full data URL.
  * @param onProgress - A callback function to report progress updates to the UI.
+ * @param prompt - The specific animation prompt to use for the video generation.
  * @returns A promise that resolves to a URL for the generated video.
  */
 export const generateVideo = async (
     apiKey: string,
     startFrameDataUrl: string,
     endFrameDataUrl: string,
-    onProgress: ProgressCallback
+    onProgress: ProgressCallback,
+    prompt: string
 ): Promise<string> => {
     if (!apiKey) {
         const errorMessage = "Hailuo AI API Key was not provided.";
@@ -29,10 +31,10 @@ export const generateVideo = async (
     try {
         const payload = {
             model: "MiniMax-Hailuo-02",
-            prompt: "Animate the bars on this chart growing smoothly from the start frame to the end frame.",
+            prompt: prompt,
             first_frame_image: startFrameDataUrl,
             last_frame_image: endFrameDataUrl,
-            duration: 6, // Fix: Changed from 5 to 6 as per API requirements for 1080P
+            duration: 6,
             resolution: "1080P"
         };
 
